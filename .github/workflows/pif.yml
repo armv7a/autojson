@@ -1,0 +1,50 @@
+name: Update pif.json
+
+on:
+  schedule:
+    # 每天16:00运行 (UTC)
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-pif-json:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Fetch pif.json from remote URL
+      run: curl -o temp1_pif.json https://raw.githubusercontent.com/chiteroman/PlayIntegrityFix/main/module/pif.json
+
+    - name: Process JSON to retain specific fields
+      run: |
+        # 使用 jq 提取所需字段并保存到 temp2_pif.json
+        jq '{ID, BRAND, DEVICE, FINGERPRINT, MANUFACTURER, MODEL, PRODUCT, SECURITY_PATCH}' temp1_pif.json > temp2_pif.json
+
+    - name: Compare temp2_pif.json with existing pif.json
+      id: compare_files
+      run: |
+        if cmp -s temp2_pif.json pif.json; then
+          echo "Files are identical, stopping job."
+          echo "skip_update=true" >> $GITHUB_ENV
+        else
+          echo "Files are different, update is needed."
+          echo "skip_update=false" >> $GITHUB_ENV
+
+    - name: Stop job if files are identical
+      if: env.skip_update == 'true'
+      run: exit 0
+
+    - name: Replace pif.json with temp2_pif.json
+      if: env.skip_update == 'false'
+      run: mv temp2_pif.json pif.json
+
+    - name: Commit and push changes
+      if: env.skip_update == 'false'
+      run: |
+        git config --local user.email "actions@github.com"
+        git config --local user.name "GitHub Actions"
+        git add pif.json
+        git commit -m "Updated pif.json with new data"
+        git push
